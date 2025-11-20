@@ -1,0 +1,89 @@
+name: Weekly Dashboard Refresh
+
+on:
+  schedule:
+    - cron: '30 2 * * 1'  # Runs every Monday at 8:00 AM Sri Lanka Time (UTC+5:30)
+  workflow_dispatch:
+
+jobs:
+  refresh-dashboard:
+    runs-on: ubuntu-22.04
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        token: ${{ secrets.DASHBOARD_TOKEN }}
+
+    - name: configure git user
+      run: |
+        git config --global user.name "${{ secrets.DASHBOARD_USERNAME }}"
+        git config --global user.email "${{ secrets.DASHBOARD_EMAIL }}"
+
+    - name: create and switch to branch
+      run: |
+        git fetch origin
+        git checkout -b weekly-update || git checkout weekly-update
+        git pull origin master
+
+    - name: Generate test file
+      run: |
+        echo "Dashboard refresh generated at $(date)" > dashboard_output.txt
+        echo "Last updated: $(date)" >> dashboard_output.txt
+
+    - name: Commit changes
+      id: commitFiles
+      run: |
+        git add -A
+        if git diff-index --quiet HEAD --; 
+        then
+          echo "hasChanged=false" >> $GITHUB_OUTPUT
+        else
+          git commit -m "[AUTOMATED] Refresh dashboard data"
+          echo "hasChanged=true" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Push changes to branch
+      if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
+      run: git push origin "weekly-update"
+      env:
+        GITHUB_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
+
+    - name: create a pull request to update the dashboard
+      id: createPR
+      if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
+      run: |
+        pr_url=$(gh pr create \
+          --title "[Automated] Refresh weekly dashboard" \
+          --body "Updating the dashboard with latest weekly data." \
+          --base master \
+          --head weekly-update)
+        echo "pr_url=$pr_url" >> $GITHUB_OUTPUT
+      env:
+        GITHUB_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
+
+    - name: Approve PR
+      if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
+      run: |
+        sleep 5
+        gh pr review ${{ steps.createPR.outputs.pr_url }} --approve
+      env:
+        GITHUB_TOKEN: ${{ secrets.DASHBOARD_REVIEWER_TOKEN }}
+
+    - name: Merge PR
+      if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
+      run: |
+        checkCount="0"
+        while [ "$checkCount" != "1" ]; do
+          sleep 20
+          checkCount=$(gh pr status --jq '[.currentBranch .statusCheckRollup[] | select((.conclusion=="SUCCESS") and ((.name=="Build on Ubuntu")))] | length' --json statusCheckRollup)
+          failedCount=$(gh pr status --jq '[.currentBranch .statusCheckRollup[] | select((.conclusion=="FAILURE") and ((.name=="Build on Ubuntu")))] | length' --json statusCheckRollup)
+          if [[ "$failedCount" != "0" ]]; then
+            echo "PR Build has failed"
+            exit 1
+          fi
+        done
+        sleep 20  
+        gh pr merge ${{ steps.createPR.outputs.pr_url }} --merge --delete-branch
+      env:
+        GITHUB_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
