@@ -62,14 +62,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
 
-    - name: Approve PR
-      if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
-      run: |
-        sleep 5
-        gh pr review ${{ steps.createPR.outputs.pr_url }} --approve
-      env:
-        GITHUB_TOKEN: ${{ secrets.DASHBOARD_REVIEWER_TOKEN }}
-
     - name: Merge PR
       if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
       run: |
