@@ -65,17 +65,37 @@ jobs:
     - name: Merge PR
       if: ${{ steps.commitFiles.outputs.hasChanged == 'true' }}
       run: |
-        checkCount="0"
-        while [ "$checkCount" != "1" ]; do
-          sleep 20
-          checkCount=$(gh pr status --jq '[.currentBranch .statusCheckRollup[] | select((.conclusion=="SUCCESS") and ((.name=="Build on Ubuntu")))] | length' --json statusCheckRollup)
-          failedCount=$(gh pr status --jq '[.currentBranch .statusCheckRollup[] | select((.conclusion=="FAILURE") and ((.name=="Build on Ubuntu")))] | length' --json statusCheckRollup)
-          if [[ "$failedCount" != "0" ]]; then
-            echo "PR Build has failed"
+        set -e
+        # Extract PR number from the URL returned by gh
+        pr_url="${{ steps.createPR.outputs.pr_url }}"
+        # If gh returned a number already, use it; otherwise strip URL
+        if [[ "$pr_url" =~ ^[0-9]+$ ]]; then
+          pr_number="$pr_url"
+        else
+          pr_number="${pr_url##*/}"
+        fi
+        echo "Waiting for PR #$pr_number to become mergeable"
+        timeout=900
+        interval=10
+        waited=0
+        while true; do
+          status=$(gh pr view "$pr_number" --json mergeStateStatus -q .mergeStateStatus)
+          echo "mergeStateStatus=$status"
+          if [ "$status" = "MERGEABLE" ] || [ "$status" = "CLEAN" ]; then
+            echo "PR is mergeable"
+            break
+          fi
+          if [ "$status" = "CONFLICTING" ] || [ "$status" = "BLOCKED" ]; then
+            echo "PR is not mergeable: $status"
             exit 1
           fi
+          if [ "$waited" -ge "$timeout" ]; then
+            echo "Timed out waiting for PR to become mergeable"
+            exit 1
+          fi
+          sleep $interval
+          waited=$((waited + interval))
         done
-        sleep 20  
-        gh pr merge ${{ steps.createPR.outputs.pr_url }} --merge --delete-branch
+        gh pr merge "$pr_number" --merge --delete-branch
       env:
-        GITHUB_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
