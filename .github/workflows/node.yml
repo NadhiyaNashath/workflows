@@ -3,7 +3,7 @@ name: Setup NodeJs
 on:
     push:
         branches:
-            - main
+            - master
 
 jobs:
     setup-node:
