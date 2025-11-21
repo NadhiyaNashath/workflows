@@ -1,0 +1,21 @@
+{
+  "name": "workflows",
+  "version": "1.0.0",
+  "description": "\"# workflows\"",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NadhiyaNashath/workflows.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/NadhiyaNashath/workflows/issues"
+  },
+  "homepage": "https://github.com/NadhiyaNashath/workflows#readme"
+}
